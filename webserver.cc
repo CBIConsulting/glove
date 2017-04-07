@@ -26,6 +26,7 @@
 #include <chrono>
 #include <thread>
 #include <zlib.h>
+
 void hello(GloveHttpRequest &request, GloveHttpResponse& response)
 {
   std::cout << "TESTING"<<std::endl;
@@ -33,11 +34,29 @@ void hello(GloveHttpRequest &request, GloveHttpResponse& response)
   response << "This is another tesxt" << std::endl;
 }
 
-void chatengine(GloveHttpRequest &request, GloveHttpResponse& response)
+int authCb(GloveHttpRequest& request, GloveHttpResponse& response)
 {
-  response << "Chat with me waaraaaanaaaa\n";
+	std::cout << "USERNAME: "<< request.getAuthUser()<<"\n";
+	return (request.checkPassword("pass"));
 }
 
+void helloAuth(GloveHttpRequest& request, GloveHttpResponse& response)
+{
+	if (request.auth(response, authCb, "Digest, Basic"))
+		{
+			std::cout << "TESTING AUTH\n";
+			auto uri = request.getUri();
+			response << "Auth: "<< uri.username<<" -- "<<uri.password<<std::endl;
+			response << "AuthType: "<< request.getAuthType();
+		}
+}
+
+void chatengine(GloveHttpRequest &request, GloveHttpResponse& response)
+{
+  response << "Chat with me\n";
+}
+
+#if ENABLE_WEBSOCKETS
 void chatreceive(GloveWebSocketData& data, GloveWebSocketHandler& ws)
 {
 	if (data.length()>300)
@@ -46,13 +65,14 @@ void chatreceive(GloveWebSocketData& data, GloveWebSocketHandler& ws)
 		ws.send("ECHO: "+data.data());
 	/* ws.ping("PINGIO", [] (GloveWebSocketHandler& ws) */
 	/* 				{ */
-	/* 					std::cout << "SE EJECUTA EL CALLBACK Y TODO\n"; */
+	/* 					std::cout << "EXECUTING CALLBACK\n"; */
 	/* 				}); */
 }
 
-void chatmaintenance(GloveWebSocketHandler& ws)
+bool chatmaintenance(GloveWebSocketHandler& ws)
 {
 }
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -66,8 +86,11 @@ int main(int argc, char *argv[])
 	/* Necesitamos callback de inicializacion (chatengine), de recepcion de mensaje, de salida de cliente y de mantenimiento (que se llamara cada cierto tiempo).
 
 	 Mirar si desde client podemos acceder a un ID.*/
-  serv.addWebSocket("/chat/", chatengine, chatreceive, chatmaintenance);
+#if ENABLE_WEBSOCKETS
+  serv.addWebSocket("/chat/", chatengine, nullptr, chatreceive, chatmaintenance);
+#endif
   serv.addRoute("/hello/$anycon/$anything", hello);
+	serv.addRoute("/authme/", helloAuth);
   serv.addRoute("/files/$filename/", GloveHttpServer::fileServer, "testing");
   std::cout << "READY"<<std::endl;
   while(1)
